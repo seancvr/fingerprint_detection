@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Fingerprint extension",
+  "description": "Extension that listens for browser fingerprinting.",
+  "version": "1.0",
+  "icons": {
+    "16": "images/icon-16.png",
+    "128": "images/icon-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:5173/", "http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["http://localhost:5173/", "http://*/*", "https://*/*"],
+      "js": ["relay.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["tabs"],
+  "action": {}
+}
