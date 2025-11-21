@@ -52,7 +52,7 @@
 
 (function () {
   // DETECTION PATTERN PARAMAETERS
-  const API_THRESHOLD = 2;
+  const API_THRESHOLD = 3;
   const FINGERPRINT_WINDOW = 50;
 
   // TIMER PARAMETERS

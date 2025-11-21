@@ -25,7 +25,7 @@ function App() {
 
   return (
     <>
-      <h1>Fingerprint</h1>
+      <h1>Fingerprint_detection</h1>
       <button onClick={() => getFingerprint()}>Get browser fingerpint</button>
       <div className="card">
         {fingerprint.visitorId !== "" && (
