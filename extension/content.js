@@ -7,14 +7,6 @@
  *    b) Call the original method using .apply() with 'this' context and arguments
  *    c) Return the original method's result
  *
- * Example of WebGL getParameter method after the wrapper() function returns:
- * WebGLRenderingContext.prototype.getParameter = function (...args) {
- *   console.log("WebGLRenderingContext.getParameter() detected.");
- *   apiCallTracker.webGL.count++;
- *   apiCallTracker.webGL.timestamp = performance.now();
- *   fingerprintCheck();
- *   return nativeWebGLRenderingContext.apply(this, args);
- * };
  *
  * Notes about prototypes and inheritance in this context:
  * - HTMLCanvasElement is a constructor function (built into browsers)
@@ -113,7 +105,7 @@
         warningTimeout = setTimeout(() => {
           fingerprintDetected = true;
           console.log(
-            `🚨 Likely Fingerprinting detected. ${
+            `🚨 LIKELY FINGERPRINTING DETECTED 🚨 ${
               timestamps.length
             } different API calls detected within ${timeFrame.toFixed(2)}ms`
           );
