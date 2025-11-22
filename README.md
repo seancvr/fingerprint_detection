@@ -67,11 +67,11 @@ And here is the form it took when applied to the detection of the **canvas.toDat
 // Save original reference
 const nativeToDataURL = HTMLCanvasElement.prototype.toDataURL;
 // Replace native prototype method with wrapper function
-WebGLRenderingContext.prototype.getParameter = function (...args) {
+HTMLCanvasElement.prototype.toDataURL = function (...args) {
   // Execute custom logic
-  console.log("WebGLRenderingContext.getParameter() detected.");
-  apiCallTracker.webGL.count++;
-  apiCallTracker.webGL.timestamp = performance.now();
+  console.log("canvas.toDataURL detected.");
+  apiCallTracker.canvas.count++;
+  apiCallTracker.canvas.timestamp = performance.now();
   fingerprintCheck();
   // Call the original method using .apply() with 'this' context and arguments
   // Return the original method's result
@@ -95,7 +95,7 @@ To understand how this wrapper method works, there are a few core concepts I had
 - The use of [`apply()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/apply), `'this'` and `args` is critical to wrapper method approach
 - `'this'` preserves the context of which `<canvas element>` element the `toDataUrl()` method is called on.
 - `args` preserves the arguments with which it is called, e.g. `toDataUrl('image/png', 0.95)`
-- `return nativeToDataURL.apply(this, args);` -> `nativeToDataURL.call(<canvas element>, 'image/png', 0.95)`
+- `return nativeToDataURL.apply(this, args);` -> `nativeToDataURL.call(canvasElement, 'image/png', 0.95)`
 
 Once I understood this I was able to define a wrapper template function and apply it to any browser API.
 
@@ -169,7 +169,7 @@ I chose to wrap the whole content script using an [immediately invoked function 
 
 ### Warning and Reset Timeout
 
-During the first run of the content script, I found that 100+ API calls were made by the FingerprintJS script and they flooded the console with messages. I had to create a mechanism to only fire the `🚨 LIKELY FINGERPRINTING DETECTED 🚨` warning after the last fingerprint API call was made. This quiet period is defined by the `QUIET_PERIOD` parameter. I also added a second `resetTimeout` function that resets the detection state variables after a longer period (`SESSION_TIMEOUT`), so that I could detect multiple fingerprint events.
+During the first run of the content script, I found that 100+ API calls were made by the FingerprintJS script and they flooded the console with messages. I had to create a mechanism to only fire the `🚨 LIKELY FINGERPRINTING DETECTED 🚨` warning after the last fingerprint API call was made. This quiet period between the last API call and the warning message is defined by the `QUIET_PERIOD` parameter. I also added a second `resetTimeout` function that resets the detection state variables after a longer period (`SESSION_TIMEOUT`), so that I could detect multiple fingerprint events.
 
 **Notes on the reset and timer logic**:
 
@@ -184,8 +184,8 @@ During the first run of the content script, I found that 100+ API calls were mad
 ```mermaid
 gantt
     title Timeout Execution Timeline
-    dateFormat X
-    axisFormat %L ms
+    dateFormat x
+    axisFormat %Q ms
 
     section API Calls
     Fingerprint API calls (100+ rapid calls) :0, 30
