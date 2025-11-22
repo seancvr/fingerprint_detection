@@ -29,7 +29,7 @@ Having identified the core browser APIs involved with canvas fingerprinting the 
 
 ## Can it be detected?
 
-The next step was to figure out how to detect the execution of a single browser API using a Chrome extension content script. After doing some research on the Brave browser, which has some built-in [fingerprint protection features](https://github.com/brave/brave-browser/wiki/Fingerprinting-Protections), I found that the method they use for blocking and spoofing involves modifying APIs.
+The next step was to figure out how to detect the execution of a single browser API using a Chrome extension content script. After doing some research on the Brave browser, which has some built-in [fingerprint protection features](https://github.com/brave/brave-browser/wiki/Fingerprinting-Protections), I found that the method they use for blocking and spoofing involves modifying browser APIs.
 
 ```
 "Brave includes two types of fingerprinting protections, (i) blocking, removing or modifying APIs, to make Brave instances look as similar as possible"
@@ -97,7 +97,7 @@ To understand how this wrapper method works, there are a few core concepts I had
 - `args` preserves the arguments with which it is called, e.g. `toDataUrl('image/png', 0.95)`
 - `return nativeToDataURL.apply(this, args);` -> `nativeToDataURL.call(canvasElement, 'image/png', 0.95)`
 
-Once I understood this I was able to define a wrapper template function and apply it to any browser API.
+Once I understood this, I was able to define a wrapper template function and apply it to any browser API.
 
 **fingerprint_detection/extension/contents.js**
 
@@ -119,6 +119,36 @@ HTMLCanvasElement.prototype.toDataURL = wrapper(
   "canvas",
   nativeToDataURL
 );
+```
+
+## Chrome Extensions
+
+I chose to build the detection solution as a [Chrome Extension](https://developer.chrome.com/docs/extensions/get-started), because of its ability to listen for events, inject scripts into the browser and generate alerts.
+
+### Architecture with the Extension approach
+
+```mermaid
+flowchart TB
+    subgraph ext["Chrome Extension"]
+        direction TB
+        sw["Service Worker<br/><br/>• Listen for messages<br/>• Generate warning on extension icon"]
+
+        subgraph scripts["Content Scripts"]
+            direction LR
+            cs["Content Script<br/>(MAIN world)<br/><br/>• Wrap APIs<br/>• Detect patterns<br/>• Post message"]
+
+            relay["Relay Script<br/>(ISOLATED world)<br/><br/>• Forward to worker"]
+        end
+
+        cs -->|"window.postMessage()"| relay
+        relay -->|"chrome.runtime.sendMessage()"| sw
+    end
+
+    subgraph page["Web Page"]
+        fp["Fingerprint Library<br/><br/>Calls APIs rapidly"]
+    end
+
+    cs -.->|"Wraps APIs"| page
 ```
 
 ## Fingerprint Detection Logic
@@ -194,36 +224,6 @@ gantt
     Last API call :milestone, 30, 0
     warningTimeout fires (100ms) :crit, 30, 100
     resetTimeout fires (4000ms) :active, 30, 4000
-```
-
-## Chrome Extensions
-
-I chose to build the detection solution as a [Chrome Extension](https://developer.chrome.com/docs/extensions/get-started), because of its ability to listen for events, inject scripts into the browser and generate alerts.
-
-### Architecture with the Extension approach
-
-```mermaid
-flowchart TB
-    subgraph ext["Chrome Extension"]
-        direction TB
-        sw["Service Worker<br/><br/>• Listen for messages<br/>• Update badge"]
-
-        subgraph scripts["Content Scripts"]
-            direction LR
-            cs["Content Script<br/>(MAIN world)<br/><br/>• Wrap APIs<br/>• Detect patterns<br/>• Post message"]
-
-            relay["Relay Script<br/>(ISOLATED world)<br/><br/>• Forward to worker"]
-        end
-
-        cs -->|"window.postMessage()"| relay
-        relay -->|"chrome.runtime.sendMessage()"| sw
-    end
-
-    subgraph page["Web Page"]
-        fp["Fingerprint Library<br/><br/>Calls APIs rapidly"]
-    end
-
-    cs -.->|"Wraps APIs"| page
 ```
 
 ## Testing and Usage
