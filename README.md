@@ -20,16 +20,16 @@ To understand exactly what fingerprinting looked like in the browser I decided t
 
 Looking at **canvas.ts** I identified what I thought were the most critical APIs for fingerprint generation:
 
-1. **canvas.toDataURL()**: Converts rendered pixels to hash.
+1. **canvas.toDataURL()**: Converts rendered pixels to hash
 2. **canvas.getContext()**: Obtains 2D rendering context for drawing
-3. **context.fillText()**: Font rendering varies by browser/OS/installed fonts.
-4. **context.globalCompositeOperation**: Blending algorithms differ between browsers.
+3. **context.fillText()**: Font rendering varies by browser/OS/installed fonts
+4. **context.globalCompositeOperation**: Blending algorithms differ between browsers
 
 Having identified the core browser APIs involved with canvas fingerprinting the next step was to figure out if they could be detected. I decided to focus on `.toDataURL()` as the API call most likely to indicate fingerprinting.
 
 ## Can it be detected?
 
-The next step was to figure out how to detect the execution of a single browser API using a chrome extension content script. After doing some research on the Brave browser, which has some built-in [fingerprint protection features](https://github.com/brave/brave-browser/wiki/Fingerprinting-Protections), I found that the method they use for blocking and spoofing involves modifying APIs.
+The next step was to figure out how to detect the execution of a single browser API using a Chrome extension content script. After doing some research on the Brave browser, which has some built-in [fingerprint protection features](https://github.com/brave/brave-browser/wiki/Fingerprinting-Protections), I found that the method they use for blocking and spoofing involves modifying APIs.
 
 ```
 "Brave includes two types of fingerprinting protections, (i) blocking, removing or modifying APIs, to make Brave instances look as similar as possible"
@@ -83,23 +83,23 @@ To understand how this wrapper method works, there are a few core concepts I had
 
 **Prototypes and Inheritance**:
 
-- [HTMLCanvasElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement) is a constructor function (built into browsers).
-- Constructor functions create objects and set up their prototype chain.
-- [`.prototype`](https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Advanced_JavaScript_objects/Object_prototypes) is the object that all canvas elements inherit from.
-- [`toDataURL`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toDataURL) is a method on that prototype.
-- [`<canvas>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/canvas) elements created on the page inherit methods from the prototype.
-- The wrapper function swaps the native method for the modified one.
+- [HTMLCanvasElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement) is a constructor function (built into browsers)
+- Constructor functions create objects and set up their prototype chain
+- [`.prototype`](https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Advanced_JavaScript_objects/Object_prototypes) is the object that all canvas elements inherit from
+- [`toDataURL`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toDataURL) is a method on that prototype
+- [`<canvas>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/canvas) elements created on the page inherit methods from the prototype
+- The wrapper function swaps the native method for the modified one
 
 **.apply(), 'this' and args**
 
-- the use of [`apply()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/apply), `'this'` and `args` is critical to wrapper method approach.
+- The use of [`apply()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/apply), `'this'` and `args` is critical to wrapper method approach
 - `'this'` preserves the context of which `<canvas element>` element the `toDataUrl()` method is called on.
 - `args` preserves the arguments with which it is called, e.g. `toDataUrl('image/png', 0.95)`
 - `return nativeToDataURL.apply(this, args);` -> `nativeToDataURL.call(<canvas element>, 'image/png', 0.95)`
 
-Once I understood this I was able to define the steps for the wrapper function and apply it to any browser API
+Once I understood this I was able to define a wrapper template function and apply it to any browser API.
 
-**fingerprint_detection/extension/contents.js\***
+**fingerprint_detection/extension/contents.js**
 
 ```javascript
 // wrapper template function
@@ -112,37 +112,46 @@ function wrapper(apiName, key, nativeMethod) {
     return nativeMethod.apply(this, args);
   };
 }
+
+// canvas method wrapper
+HTMLCanvasElement.prototype.toDataURL = wrapper(
+  "canvas.toDataURL",
+  "canvas",
+  nativeToDataURL
+);
 ```
 
 ## Fingerprint Detection Logic
 
-The full fingerprint detection logic is defined in **extension/content.js**, a Chrome extension [content script](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts) that essentially injects Javascript into the webpage before any fingerprinting scripts can execute. The injected javascript wraps the native APIs used for canvas, audio and webGL fingerprinting, and causes them to trigger alerts when they are called by the FingerprintJS script.
+The full fingerprint detection logic is defined in **extension/content.js**, a Chrome extension [content script](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts) that injects Javascript into the webpage before any fingerprinting scripts can run. The injected Javascript wraps the native APIs used for canvas, audio and webGL fingerprinting, and causes them to trigger alerts when they are called by the FingerprintJS script.
 
 ### Detection Pattern
 
-I used a very simple detection pattern for this proof of concept. If 2 or more of my chosen APIs (canvas, audio and webGL in this case) are called within a specified time-frame, then trigger a `🚨 LIKELY FINGERPRINTING DETECTED 🚨`. The two parameters used to define the detection pattern are defined as:
+I used a very simple detection pattern for this proof of concept. If 2 or more of my chosen APIs (canvas, audio and webGL in this case) are called within a specified time-frame, then this will trigger a warning: `🚨 LIKELY FINGERPRINTING DETECTED 🚨`. The two parameters used to define the detection pattern are defined as:
 
-- `API_THRESHOLD` - number of APIs that need to trigger for the script to consider that a fingerprinting attempt was made. this can be easily extended by adding more API wrappers to the script.
-- `FINGERPRINT_WINDOW` - Time-frame in which the APIs must fire. A 50 millisecond window was chosen after estimating the execution time of `FingerprintJS.load()`. In the **FingerprintJS** library, the `.load()` is where the browser APIs are called.
-  **fingerprint_detection/src/App.tsx**
-  ```Javascript
-  const getFingerprint = async () => {
-    const t0 = performance.now();
-    const fp = await FingerprintJS.load();
-    const t1 = performance.now();
-    console.log(`FingerprintJS.load() duration: ${t1 - t0} milliseconds`);
-  ```
+- `API_THRESHOLD` - Number of APIs that need to trigger for the script to consider that a fingerprinting attempt was made. This can be easily extended by adding more API wrappers to the script
+- `FINGERPRINT_WINDOW` - Time-frame in which the APIs must fire. A 50 millisecond window was chosen after estimating the execution time of `FingerprintJS.load()`. In the **FingerprintJS** library, the `.load()` is where the browser APIs are called
+
+**fingerprint_detection/src/App.tsx**
+
+```Javascript
+const getFingerprint = async () => {
+  const t0 = performance.now();
+  const fp = await FingerprintJS.load();
+  const t1 = performance.now();
+  console.log(`FingerprintJS.load() duration: ${t1 - t0} milliseconds`);
+```
 
 ### IIFE
 
-I chose to wrap the whole content script using an [immediately invoked function expression](https://developer.mozilla.org/en-US/docs/Glossary/IIFE) for two reasons. Firstly in a real world scenario it would prevent easy direct detection and bypass of my content script in the event that a sophisticated fingerprinting script was running in the browser. Secondly it created a [closure](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Closures) in which the script is able to access the variables it needs to function
+I chose to wrap the whole content script using an [immediately invoked function expression](https://developer.mozilla.org/en-US/docs/Glossary/IIFE) for two reasons. Firstly, in a real world scenario it would prevent easy direct detection and bypass of my content script in the event that a sophisticated fingerprinting script was running in the browser. Secondly, it created a [closure](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Closures) in which the script is able to access the variables it needs to function.
 
 **Notes about IIFE's**:
 
 - Creates private scope / encapsulation of variables (e.g. API_THRESHOLD)
 - Variables not accessible from browser console or other scripts
 - Prevents global namespace pollution
-- Prevents easy direct detection of detection logic
+- Prevents easy direct detection of the content script
 - Prevents easy bypass of wrapper functions via state manipulation
 - Only modified prototype methods are exposed to the page
 
@@ -151,26 +160,26 @@ I chose to wrap the whole content script using an [immediately invoked function 
 - A closure is when a function "remembers" and can access variables from its outer scope
 - The IIFE creates a closure where inner functions retain access to IIFE variables
 - Even after the IIFE finishes executing, the wrapper functions can still access:
-  - API_THRESHOLD, FINGERPRINT_WINDOW, SESSION_TIMEOUT, etc.
-  - apiCallTracker object and its state
-  - fingerprintDetected flag
-  - fingerprintCheck() and resetDetection() functions
+  - `API_THRESHOLD`, `FINGERPRINT_WINDOW`, `SESSION_TIMEOUT`, etc.
+  - `apiCallTracker` object and its state
+  - `fingerprintDetected` flag
+  - `fingerprintCheck()` and `resetDetection()` functions
 - This closure keeps these variables "alive" and private while the wrapper functions continue to use them
 - The wrapper functions are "closed over" the IIFE's scope, creating a secure private state
 
 ### Warning and Reset Timeout
 
-During the first run of the content script I found that 100+ API calls were made by the FingerprintJS script and they flooded the console with messages. I had to create a mechanism to only fire the `🚨 LIKELY FINGERPRINTING DETECTED 🚨` warning after the last fingerprint API call was made. This quiet period defined using the `QUIET_PERIOD` parameter. I also added a second `resetTimeout` function that reset the detection state variables after a longer quiet period,`SESSION_TIMEOUT`, so that I could detect multiple fingerprint events
+During the first run of the content script, I found that 100+ API calls were made by the FingerprintJS script and they flooded the console with messages. I had to create a mechanism to only fire the `🚨 LIKELY FINGERPRINTING DETECTED 🚨` warning after the last fingerprint API call was made. This quiet period is defined by the `QUIET_PERIOD` parameter. I also added a second `resetTimeout` function that resets the detection state variables after a longer period (`SESSION_TIMEOUT`), so that I could detect multiple fingerprint events.
 
 **Notes on the reset and timer logic**:
 
 - On each call of `fingerprintCheck()` a `resetTimeout` function is called
-- On the first confirmed fingerprint detection a warningTimeout function is called
+- On the first confirmed fingerprint detection a `warningTimeout` function is called
 - The warning message will only fire `QUIET_PERIOD` milliseconds after the last API detection
 - The `resetDetection()` function will only fire `SESSION_TIMEOUT` milliseconds after the last API detection
 - The `setTimeout` function call returns a `<timeout id>` value which is stored in warningTimeout resetTimeout
 - That is how timeouts can be cleared and reset during each cycle of `fingerprintCheck()`
-- `clearTimeout` is a builtin function
+- `clearTimeout` is a built-in function
 
 ```mermaid
 gantt
@@ -219,11 +228,11 @@ flowchart TB
 
 ## Testing and Usage
 
-Make a local copy of the Vite + React app and extenson:
+Make a local copy of the Vite + React app and extension:
 
 `git clone https://github.com/seancvr/fingerprint_detection.git`
 
-Follow the instruction to load an unpacked extension at [developer.chrome](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world). Provide the **fingerprint_detection/extension/** directory to the 'Load unpacked' directory selector.
+Follow the instructions to load an unpacked extension at [developer.chrome](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world). Provide the **fingerprint_detection/extension/** directory to the 'Load unpacked' directory selector.
 
 <p align="center">
   <img src="pictures/load_unpacked_extension.png" width="50%" height="50%" title="load_upacked_extension">
@@ -233,7 +242,7 @@ Run the Vite + React app:
 
 `npm run dev`
 
-Open it at `http:localhost/5173/` in Chrome. You should see the React fingerprint app running and the 'browser extension installed.
+Open it at `http:localhost/5173/` in Chrome. You should see the React fingerprint app running and the browser extension installed.
 
 <p align="center">
   <img src="pictures/react_app_and_extension.png" width="50%" height="50%" title="react_app_and_extension">
@@ -247,7 +256,7 @@ Click the `Get browser fingerprint` button. You should see the warning symbol po
 
 # References
 
-## FingerprintJS Library
+### FingerprintJS Library
 
 [FingerprintJS - GitHub Repository](https://github.com/fingerprintjs/fingerprintjs)
 
