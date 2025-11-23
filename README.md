@@ -31,9 +31,7 @@ Having identified the core browser APIs involved with canvas fingerprinting the 
 
 The next step was to figure out how to detect the execution of a single browser API using a Chrome extension content script. After doing some research on the Brave browser, which has some built-in [fingerprint protection features](https://github.com/brave/brave-browser/wiki/Fingerprinting-Protections), I found that the method they use for blocking and spoofing involves modifying browser APIs.
 
-```
-"Brave includes two types of fingerprinting protections, (i) blocking, removing or modifying APIs, to make Brave instances look as similar as possible"
-```
+> "Brave includes two types of fingerprinting protections, (i) blocking, removing or modifying APIs, to make Brave instances look as similar as possible"
 
 After doing some digging in the [brave-core](https://github.com/brave/brave-core/tree/master) library, I found [this](https://github.com/brave/brave-core/blob/master/ios/brave-ios/Sources/Brave/Frontend/UserContent/UserScripts/Scripts_Dynamic/Scripts/Paged/FarblingProtectionScript.js) script which seems to implement this API modification technique.
 
